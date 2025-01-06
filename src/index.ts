@@ -9,13 +9,18 @@ new Elysia()
 			app.post(
 				"/compile",
 				async ({ body, error, set }) => {
-					const { template, jobs } = body;
+					const { template, jobs, variables } = body;
 
 					const cmd = ["typst", "compile", "-", "-"];
-					cmd.push("--diagnostic-format", "short");
+					// cmd.push("--diagnostic-format", "short");
 
 					if (jobs) {
 						cmd.push("--jobs", jobs.toString());
+					}
+					if (variables) {
+						for (const [key, value] of Object.entries(variables)) {
+							cmd.push("--input", `${key}=${value}`);
+						}
 					}
 
 					const child = spawn({
@@ -27,11 +32,11 @@ new Elysia()
 					child.stdin.write(template);
 					child.stdin.end();
 
-					const output = await child.exited;
+					const statusCode = await child.exited;
 					const stdout = await readableStreamToBytes(child.stdout);
 					const stderr = await readableStreamToBytes(child.stderr);
 
-					if (output === 0) {
+					if (statusCode === 0) {
                         set.headers["content-type"] = "application/pdf";
 						return stdout;
 					}
@@ -44,6 +49,9 @@ new Elysia()
 							description: "Template to compile",
 							example: "Hello, people!",
 						}),
+						variables: t.Optional( t.Record(t.String(), t.String(), {
+							description: "Variables to replace in the template",
+						})),
 						jobs: t.Optional(
 							t.Integer({
 								minimum: 1,
@@ -66,3 +74,6 @@ new Elysia()
 		),
 	)
 	.listen(3030);
+
+console.log("Server listening on port 3030");
+
