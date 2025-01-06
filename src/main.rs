@@ -1,17 +1,73 @@
-use actix_web::{post, web, App, HttpResponse, HttpServer};
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    routing::post,
+    Json, Router,
+};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashMap;
 use std::process::Stdio;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use utoipa::{OpenApi, ToSchema};
-use utoipa_scalar::{Scalar, Servable};
 
 #[derive(Deserialize, Serialize, ToSchema)]
-pub struct CompileRequest {
+struct CompileRequest {
+    /// Template that will be rendered
+    #[schema(example = "Hello, #sys.input.name!")]
     template: String,
+    /// Variables that will be passed to the template, accessible in the template via #sys.input.variable_name
+    ///
+    /// Important: The variable name cannot contain underscores, use lowerCamelCase as a convention
+    #[schema(example = "{\"name\": \"John Doe\"}")]
     variables: Option<HashMap<String, String>>,
+    /// Number of threads to use for rendering, defaults to the number of logical CPUs
+    #[schema(example = 4, minimum = 1, maximum = 256)]
     jobs: Option<u32>,
+}
+
+#[derive(Serialize, ToSchema)]
+#[schema(
+    format = "Binary",
+    content_encoding = "binary",
+    content_media_type = "application/pdf",
+    value_type = String
+)]
+struct CompiledPdf(Vec<u8>);
+
+impl IntoResponse for CompiledPdf {
+    fn into_response(self) -> Response {
+        (
+            StatusCode::OK,
+            [("content-type", "application/pdf")],
+            self.0,
+        )
+            .into_response()
+    }
+}
+
+#[derive(Serialize, Deserialize, ToSchema)]
+enum CompileError {
+    /// Error when reading or writing files, spawning processes, etc.
+    #[schema(example = "Todo already exists")]
+    IoError(String),
+    /// Error when the template is invalid, for example, a syntax error, unexpected token, missing variable, etc.
+    #[schema(example = "Invalid template: unexpected token '!'")]
+    InvalidTemplate(String),
+}
+
+impl IntoResponse for CompileError {
+    fn into_response(self) -> Response {
+        let (status, error_message) = match self {
+            CompileError::IoError(error) => (StatusCode::INTERNAL_SERVER_ERROR, error),
+            CompileError::InvalidTemplate(error) => (StatusCode::BAD_REQUEST, error),
+        };
+        let body = Json(json!({
+            "error": error_message,
+        }));
+        (status, body).into_response()
+    }
 }
 
 #[utoipa::path(
@@ -19,50 +75,47 @@ pub struct CompileRequest {
     path = "/api/typst/compile",
     request_body = CompileRequest,
     responses(
-        (status = 200, description = "Compiled PDF", content_type = "application/pdf", body = [u8]),
-        (status = 500, description = "Error", body = String)
+        (status = 200, description = "Compiled PDF", content_type = "application/pdf", body = CompiledPdf),
+        (status = 500, description = "Error", body = CompileError)
     )
 )]
-#[post("/api/typst/compile")]
-async fn compile_pdf(body: web::Json<CompileRequest>) -> Result<HttpResponse, actix_web::Error> {
+async fn compile_pdf(Json(body): Json<CompileRequest>) -> Result<CompiledPdf, CompileError> {
     let mut cmd = Command::new("typst");
-
-    cmd.args(["compile", "-", "-"]); //.arg("-").arg("-");
-    if let Some(j) = &body.jobs {
+    cmd.args(["compile", "-", "-"]);
+    if let Some(j) = body.jobs {
         cmd.arg("--jobs").arg(j.to_string());
     }
-    if let Some(vars) = &body.variables {
+    if let Some(vars) = body.variables {
         for (key, value) in vars {
             cmd.arg("--input").arg(format!("{}={}", key, value));
         }
     }
+
     let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(actix_web::error::ErrorInternalServerError)?;
+        .map_err(|e| CompileError::IoError(e.to_string()))?;
 
     if let Some(stdin) = child.stdin.as_mut() {
         stdin
             .write_all(body.template.as_bytes())
             .await
-            .map_err(actix_web::error::ErrorInternalServerError)?;
+            .map_err(|e| CompileError::IoError(e.to_string()))?;
     }
 
     let output = child
         .wait_with_output()
         .await
-        .map_err(actix_web::error::ErrorInternalServerError)?;
+        .map_err(|e| CompileError::IoError(e.to_string()))?;
 
-    if output.status.success() {
-        Ok(HttpResponse::Ok()
-            .content_type("application/pdf")
-            .body(output.stdout))
-    } else {
-        Ok(HttpResponse::InternalServerError()
-            .body(String::from_utf8_lossy(&output.stderr).to_string()))
+    if output.status.success() == false {
+        let error_message = String::from_utf8_lossy(&output.stderr).to_string();
+        return Err(CompileError::InvalidTemplate(error_message));
     }
+
+    Ok(CompiledPdf(output.stdout))
 }
 
 #[derive(OpenApi)]
@@ -70,17 +123,14 @@ async fn compile_pdf(body: web::Json<CompileRequest>) -> Result<HttpResponse, ac
 struct ApiDoc;
 
 #[tokio::main]
-async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| {
-        App::new()
-            .service(compile_pdf)
-            .service(Scalar::with_url("/scalar", ApiDoc::openapi()))
-            .route(
-                "/api-docs/openapi.json",
-                web::get().to(|| async { actix_web::HttpResponse::Ok().json(ApiDoc::openapi()) }),
-            )
-    })
-    .bind(("127.0.0.1", 3030))?
-    .run()
-    .await
+async fn main() {
+    let app = Router::new()
+        .route("/api/typst/compile", post(compile_pdf))
+        .route(
+            "/api-docs/openapi.json",
+            axum::routing::get(|| async { axum::Json(ApiDoc::openapi()) }),
+        );
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3030").await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }

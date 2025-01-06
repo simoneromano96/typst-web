@@ -4,13 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-actix-web = "4.9.0"
+axum = "0.8.1"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.134"
-tokio = { version = "1.42.0", features = [
-    "rt-multi-thread",
-    "macros",
-    "process",
-] }
+tokio = { version = "1.42.0", features = ["rt-multi-thread", "macros", "process", "io-util"] }
 utoipa = "5.3.1"
-utoipa-scalar = { version = "0.2.1", features = ["actix-web"] }
