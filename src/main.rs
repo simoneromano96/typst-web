@@ -127,7 +127,7 @@ async fn main() {
     let app = Router::new()
         .route("/api/typst/compile", post(compile_pdf))
         .route(
-            "/api-docs/openapi.json",
+            "/api/docs/openapi.json",
             axum::routing::get(|| async { axum::Json(ApiDoc::openapi()) }),
         );
 
