@@ -64,6 +64,7 @@ This project is licensed under either of the following licenses, at your option:
 ## Roadmap
 Here are some possible future developments for typst-web:
 
+- **Font management**: Implement some way to add and specify custom fonts.
 - **Authentication and Authorization**: Implement user authentication and authorization to secure the API endpoints.
 - **Enhanced Error Handling**: Improve error handling to provide more detailed and user-friendly error messages.
 - **Performance Optimization**: Optimize the rendering process to handle larger templates and more concurrent requests.

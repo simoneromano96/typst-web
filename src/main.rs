@@ -1,5 +1,5 @@
 use axum::{
-    http::StatusCode,
+    http::{header, StatusCode},
     response::{IntoResponse, Response},
     routing::post,
     Json, Router,
@@ -40,7 +40,7 @@ impl IntoResponse for CompiledPdf {
     fn into_response(self) -> Response {
         (
             StatusCode::OK,
-            [("content-type", "application/pdf")],
+            [(header::CONTENT_TYPE, "application/pdf")],
             self.0,
         )
             .into_response()
