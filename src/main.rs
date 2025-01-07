@@ -6,7 +6,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{collections::HashMap, process::Stdio};
+use std::{collections::HashMap, env, process::Stdio};
 use tokio::{io::AsyncWriteExt, net::TcpListener, process::Command};
 use utoipa::{OpenApi, ToSchema};
 
@@ -129,6 +129,8 @@ async fn main() {
             get(|| async { Json(ApiDoc::openapi()) }),
         );
 
-    let listener = TcpListener::bind("0.0.0.0:3030").await.unwrap();
+    let port = env::var("APP_PORT").unwrap_or_else(|_| "8080".to_string());
+    let addr = format!(":::{}", port);
+    let listener = TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
