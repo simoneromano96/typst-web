@@ -1,26 +1,25 @@
-app = "typst-web"
+# fly.toml app configuration file generated for typst-web on 2025-01-07T20:56:04+01:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'typst-web'
+primary_region = 'cdg'
 
 [build]
-dockerfile = "./.docker/Dockerfile"
-build-target = "final"
 
 [env]
-APP_PORT = "8080"
+APP_PORT = '8080'
 
-[[services]]
+[http_service]
 internal_port = 8080
-protocol = "tcp"
+force_https = true
+auto_stop_machines = 'stop'
+auto_start_machines = true
+min_machines_running = 0
+processes = ['app']
 
-[[services.ports]]
-handlers = ["http"]
-port = 80
-
-[[services.ports]]
-handlers = ["tls", "http"]
-port = 443
-
-[[services.tcp_checks]]
-interval = "15s"
-timeout = "2s"
-grace_period = "1m"
-restart_limit = 0
+[[vm]]
+memory = '1gb'
+cpu_kind = 'shared'
+cpus = 1
