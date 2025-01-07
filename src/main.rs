@@ -1,15 +1,13 @@
 use axum::{
     http::{header, StatusCode},
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashMap;
-use std::process::Stdio;
-use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
+use std::{collections::HashMap, process::Stdio};
+use tokio::{io::AsyncWriteExt, net::TcpListener, process::Command};
 use utoipa::{OpenApi, ToSchema};
 
 #[derive(Deserialize, Serialize, ToSchema)]
@@ -128,9 +126,9 @@ async fn main() {
         .route("/api/typst/compile", post(compile_pdf))
         .route(
             "/api/docs/openapi.json",
-            axum::routing::get(|| async { axum::Json(ApiDoc::openapi()) }),
+            get(|| async { Json(ApiDoc::openapi()) }),
         );
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3030").await.unwrap();
+    let listener = TcpListener::bind("0.0.0.0:3030").await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
