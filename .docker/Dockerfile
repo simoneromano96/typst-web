@@ -10,7 +10,7 @@ RUN cargo install --locked typst-cli
 RUN cp /usr/local/cargo/bin/typst /usr/local/bin/typst
 
 # Stage 3: Final
-FROM gcr.io/distroless/cc-debian12
+FROM gcr.io/distroless/cc-debian12 AS final
 COPY --from=build /app/target/release/typst-web /
 COPY --from=typst /usr/local/bin/typst /usr/local/bin/typst
 EXPOSE 3030
